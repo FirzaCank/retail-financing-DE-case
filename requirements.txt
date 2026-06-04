@@ -1,0 +1,42 @@
+# Retail Financing Data Platform: Python dependencies
+# Covers the dbt transform layer (Phase 3) and the ingestion scripts,
+# profiling/monitoring notebooks, and freshness alert job (Phase 4).
+# Pinned with lower bounds.
+#
+# Install:
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Local GCP auth uses Application Default Credentials:
+#   gcloud auth application-default login
+
+# --- Transform (dbt) ---
+# Two run modes: BigQuery (cloud) or DuckDB (local). Install both adapters;
+# the active one is selected by the dbt target (dev/prod = bigquery, local = duckdb).
+dbt-bigquery>=1.7.0
+dbt-duckdb>=1.7.0
+duckdb>=0.10        # local ingestion (load_local_duckdb.py) and the local warehouse
+
+# --- Core data handling ---
+pandas>=2.0
+openpyxl>=3.1          # Excel reader for excel_to_csv.py and the profiling notebook
+
+# --- GCP SDKs ---
+google-cloud-bigquery>=3.10
+google-cloud-storage>=2.10
+google-cloud-monitoring>=2.15   # freshness_alert.py --push-metric only
+
+# --- BigQuery <-> pandas integration ---
+db-dtypes>=1.1
+pyarrow>=12.0
+
+# --- Notebook visualization ---
+plotly>=5.15
+matplotlib>=3.7         # fallback / static export
+
+# --- Notebook runtime ---
+notebook>=7.0
+ipykernel>=6.0
+
+# --- Local config ---
+python-dotenv>=1.0      # load .env (PROJECT_ID, GCS_BUCKET) in local dev

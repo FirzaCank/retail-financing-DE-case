@@ -1,0 +1,126 @@
+version: 2
+
+models:
+
+  - name: stg_transactions
+    description: >
+      Deduped by transaction_id keeping latest updated_at. Types cast,
+      currency normalized to IDR via dim_exchange_rate, DQ flags added.
+      Materialized as view (cheap, recomputed per query). Downstream
+      fact_transactions handles the incremental MERGE.
+    columns:
+      - name: transaction_id
+        description: Business primary key. Unique after dedup.
+        tests:
+          - unique
+          - not_null
+      - name: transaction_ts
+        description: Transaction timestamp cast from raw STRING.
+        tests:
+          - not_null
+      - name: transaction_date
+        description: Date component of transaction_ts. Used for partitioning.
+        tests:
+          - not_null
+      - name: amount_original
+        description: Amount in source currency. Nullable; null rows are flagged is_null_amount and quarantined.
+      - name: currency
+        description: USD or IDR.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['USD', 'IDR']
+      - name: amount_idr
+        description: Amount normalized to IDR (amount_original * rate_to_idr).
+      - name: payment_method
+        tests:
+          - accepted_values:
+              values: ['Cash', 'Credit Card', 'Debit Card', 'QRIS', 'Transfer']
+      - name: transaction_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['SUCCESS', 'PENDING', 'FAILED']
+      - name: channel
+        tests:
+          - accepted_values:
+              values: ['BRANCH', 'MOBILE', 'PARTNER', 'WEB']
+      - name: merchant_category
+        tests:
+          - accepted_values:
+              values: ['ELECTRONICS', 'FASHION', 'FOOD', 'GROCERY', 'TRAVEL']
+      - name: device_type
+        tests:
+          - accepted_values:
+              values: ['ANDROID', 'IOS', 'WEB']
+      - name: fraud_flag
+        description: Boolean cast from Y/N source string.
+      - name: updated_at
+        tests:
+          - not_null
+      - name: is_null_amount
+        description: TRUE if amount_original IS NULL (Phase 1 count 179).
+      - name: is_negative_amount
+        description: TRUE if amount_original < 0 (Phase 1 count 84).
+      - name: is_future_dated
+        description: TRUE if transaction_date > CURRENT_DATE() (Phase 1 count 64).
+      - name: is_broken_cust_fk
+        description: TRUE if customer_id = 'C99999' (Phase 1 count 80).
+      - name: is_broken_branch_fk
+        description: TRUE if branch_id = 'B999' (Phase 1 count 80).
+      - name: dq_reason
+        description: Pipe-delimited list of failed DQ rules. NULL if row passes.
+
+  - name: stg_customers
+    description: >
+      Deduped by customer_id keeping the row with the latest registration_date.
+      Within duplicate pairs the conflict-prone attributes (email, phone,
+      birth_date, occupation, income_band, kyc_status) are resolved to the
+      most recent record. SCD2 history accrues forward via snap_customers.
+    columns:
+      - name: customer_id
+        description: Natural key. Unique after dedup.
+        tests:
+          - unique
+          - not_null
+      - name: customer_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ACTIVE', 'INACTIVE']
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              values: ['GOLD', 'PLATINUM', 'SILVER']
+      - name: kyc_status
+        tests:
+          - accepted_values:
+              values: ['PENDING', 'REJECTED', 'VERIFIED']
+
+  - name: stg_branches
+    description: >
+      30 rows cleaned and typed. branch_name vs city mismatch flagged in
+      branch_name_city_mismatch column rather than auto-corrected (the
+      source naming convention may be deliberate).
+    columns:
+      - name: branch_id
+        description: Natural key.
+        tests:
+          - unique
+          - not_null
+      - name: branch_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['ACTIVE', 'INACTIVE']
+      - name: region
+        description: Uppercased in staging. Accepted values are normalized to CENTRAL, EAST, WEST.
+        tests:
+          - accepted_values:
+              values: ['CENTRAL', 'EAST', 'WEST']
+      - name: branch_type
+        tests:
+          - accepted_values:
+              values: ['FLAGSHIP', 'PARTNER', 'REGULAR']
+      - name: branch_name_city_mismatch
+        description: TRUE if branch_name does not contain city. 27 of 30 rows in Phase 1.

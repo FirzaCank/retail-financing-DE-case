@@ -1,0 +1,24 @@
+version: 2
+
+models:
+
+  - name: transactions_rejected
+    description: >
+      Quarantine table for rows that failed at least one hard DQ rule in
+      stg_transactions. Mirrors raw_transactions columns plus dq_reason
+      and rejected_at. Incremental MERGE on transaction_id with 3-day
+      lookback. Same row also appears in marts.fact_transactions with
+      is_quarantined = TRUE so totals stay complete; this table exists
+      for triage by failure reason.
+    columns:
+      - name: transaction_id
+        tests:
+          - unique
+          - not_null
+      - name: dq_reason
+        description: Pipe-delimited list of failed DQ rules.
+        tests:
+          - not_null
+      - name: rejected_at
+        tests:
+          - not_null

@@ -1,0 +1,155 @@
+version: 2
+
+models:
+
+  - name: fact_transactions
+    description: >
+      Grain: one row per transaction_id. LEFT JOIN to all dimensions; broken
+      FKs map to the unknown member (_sk = -1). Hard-fail DQ rows are flagged
+      is_quarantined = TRUE and dq_reason holds the pipe-delimited list of
+      failed rules. Partitioned by DATE(transaction_ts), clustered by
+      customer_sk and branch_sk.
+    columns:
+      - name: transaction_pk
+        description: Surrogate hash of transaction_id + updated_at.
+        tests:
+          - unique
+          - not_null
+      - name: transaction_id
+        description: Degenerate dimension from source. Unique per transaction.
+        tests:
+          - unique
+          - not_null
+      - name: customer_sk
+        description: FK to dim_customer. Broken FKs (Phase 1 count 80) map to -1.
+        tests:
+          - not_null
+          - relationships:
+              to:    ref('dim_customer')
+              field: customer_sk
+      - name: branch_sk
+        description: FK to dim_branch. Broken FKs (Phase 1 count 80) map to -1.
+        tests:
+          - not_null
+          - relationships:
+              to:    ref('dim_branch')
+              field: branch_sk
+      - name: date_sk
+        description: FK to dim_date. YYYYMMDD integer.
+        tests:
+          - not_null
+          - relationships:
+              to:    ref('dim_date')
+              field: date_sk
+      - name: rate_sk
+        description: FK to dim_exchange_rate.
+        tests:
+          - not_null
+          - relationships:
+              to:    ref('dim_exchange_rate')
+              field: rate_sk
+      - name: currency
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['USD', 'IDR']
+      - name: transaction_status
+        tests:
+          - accepted_values:
+              values: ['SUCCESS', 'PENDING', 'FAILED']
+      - name: transaction_ts
+        tests:
+          - not_null
+      - name: updated_at
+        tests:
+          - not_null
+      - name: is_quarantined
+        tests:
+          - not_null
+      - name: loaded_at
+        tests:
+          - not_null
+
+  - name: dim_customer
+    description: >
+      Customer dimension. SCD Type 2 history sourced from snap_customers.
+      Each row is one version of a customer; current versions have
+      is_current = TRUE and valid_to = NULL. Unknown member: customer_sk = -1.
+    columns:
+      - name: customer_sk
+        description: INT64 surrogate (FARM_FINGERPRINT of dbt_scd_id).
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Natural key. Repeats across SCD2 versions.
+        tests:
+          - not_null
+      - name: customer_status
+        tests:
+          - accepted_values:
+              values: ['ACTIVE', 'INACTIVE']
+      - name: kyc_status
+        tests:
+          - accepted_values:
+              values: ['PENDING', 'REJECTED', 'VERIFIED']
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              values: ['GOLD', 'PLATINUM', 'SILVER']
+      - name: valid_from
+        tests:
+          - not_null
+      - name: is_current
+        tests:
+          - not_null
+
+  - name: dim_branch
+    description: >
+      Branch dimension. SCD Type 1 (overwrite). 30 source rows including
+      13 INACTIVE that are carried, not filtered. Unknown member:
+      branch_sk = -1.
+    columns:
+      - name: branch_sk
+        tests:
+          - unique
+          - not_null
+      - name: branch_id
+        tests:
+          - unique
+          - not_null
+      - name: branch_status
+        tests:
+          - accepted_values:
+              values: ['ACTIVE', 'INACTIVE']
+      - name: branch_type
+        tests:
+          - accepted_values:
+              values: ['FLAGSHIP', 'PARTNER', 'REGULAR']
+
+  - name: dim_date
+    description: >
+      Date spine from 2020-01-01 to 2030-12-31 plus the unknown member row.
+    columns:
+      - name: date_sk
+        tests:
+          - unique
+          - not_null
+      - name: full_date
+        description: NULL only on the unknown member row.
+
+  - name: dim_exchange_rate
+    description: >
+      Exchange rate dimension from dbt seed exchange_rate_seed. Monthly
+      USD/IDR rates with a constant IDR=1.00 row. Unknown member:
+      rate_sk = -1.
+    columns:
+      - name: rate_sk
+        tests:
+          - unique
+          - not_null
+      - name: currency
+        tests:
+          - not_null
+      - name: rate_to_idr
+        description: Multiplier to convert amount_original to amount_idr.

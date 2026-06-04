@@ -1,0 +1,55 @@
+name: retail_financing_platform
+version: '1.0.0'
+config-version: 2
+profile: retail_financing
+
+model-paths:    ["models"]
+snapshot-paths: ["snapshots"]
+seed-paths:     ["seeds"]
+test-paths:     ["tests"]
+macro-paths:    ["macros"]
+analysis-paths: ["analyses"]
+target-path:    "target"
+clean-targets:  ["target", "dbt_packages"]
+
+vars:
+  # Override at run time with --vars or in profiles.yml
+  start_date: '2020-01-01'
+  end_date:   '2030-12-31'
+
+models:
+  retail_financing_platform:
+    +persist_docs:
+      relation: true
+      columns:  true
+    staging:
+      +materialized: view
+      +schema:       staging
+      +tags:         ['staging']
+    marts:
+      +materialized: table
+      +schema:       marts
+      +tags:         ['marts']
+    quarantine:
+      +materialized: incremental
+      +schema:       quarantine
+      +tags:         ['quarantine']
+
+snapshots:
+  retail_financing_platform:
+    +target_schema: snapshots
+    +strategy:      check
+    +tags:          ['snapshot']
+
+seeds:
+  retail_financing_platform:
+    +schema: seeds
+    +quote_columns: false
+    exchange_rate_seed:
+      +column_types:
+        currency:    string
+        rate_date:   date
+        rate_to_idr: numeric
+
+# dbt source freshness on raw_transactions (loaded_at_field = ingestion_ts)
+# is configured in models/staging/_sources.yml.

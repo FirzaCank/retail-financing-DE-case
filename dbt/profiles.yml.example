@@ -1,0 +1,34 @@
+# Copy to ~/.dbt/profiles.yml (or keep in the dbt project dir) and fill in values.
+#
+# Two ways to run:
+#   - GCP (dev/prod targets): BigQuery, needs a project + ADC login.
+#   - local: DuckDB, a single file on disk, no cloud account needed.
+#     Run with: dbt build --target local
+
+retail_financing:
+  target: dev
+  outputs:
+
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('DBT_PROJECT_ID', 'YOUR_GCP_PROJECT_ID') }}"
+      dataset: marts
+      location: asia-southeast2
+      threads: 4
+      timeout_seconds: 300
+
+    prod:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('DBT_PROJECT_ID', 'YOUR_GCP_PROJECT_ID') }}"
+      dataset: marts
+      location: asia-southeast2
+      threads: 4
+      timeout_seconds: 300
+
+    local:
+      type: duckdb
+      path: "{{ env_var('DUCKDB_PATH', 'retail_local.duckdb') }}"
+      schema: marts
+      threads: 4

@@ -1,0 +1,13 @@
+target/
+dbt_packages/
+logs/
+profiles.yml
+*.pyc
+__pycache__/
+.env
+.DS_Store
+data/*.csv
+.venv/
+*.ipynb_checkpoints/
+*.duckdb
+*.duckdb.wal

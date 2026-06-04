@@ -1,0 +1,97 @@
+version: 2
+
+sources:
+  - name: raw
+    database: "{{ env_var('DBT_PROJECT_ID') if target.type == 'bigquery' else (env_var('DUCKDB_CATALOG', 'retail_local')) }}"
+    schema: raw
+    description: >
+      Landing layer. Append-only batch loads from GCS daily CSV files.
+      No transformations applied. Every row carries ingestion_ts and source_file.
+    loaded_at_field: ingestion_ts
+    freshness:
+      warn_after: { count: 26, period: hour }
+      error_after: { count: 48, period: hour }
+    tables:
+      - name: raw_transactions
+        description: >
+          Source transactions. 12,300 rows in Phase 1 sample. Includes
+          300 duplicate transaction_id pairs (different updated_at), 179 null
+          amounts, 84 negative amounts, 80 broken customer_id (C99999), 80
+          broken branch_id (B999), 64 future-dated rows. updated_at is the
+          CDC watermark. Late arrivals up to 2 days.
+        columns:
+          - name: transaction_id
+            description: Business primary key. 300 duplicates expected pre-dedup.
+          - name: customer_id
+            description: FK to customers. 80 rows hold sentinel 'C99999' (broken FK).
+          - name: branch_id
+            description: FK to branches. 80 rows hold sentinel 'B999' (broken FK).
+          - name: transaction_date
+            description: Transaction timestamp. Stored as STRING in source, cast in staging.
+          - name: amount
+            description: Transaction amount in source currency. 179 nulls, 84 negatives.
+          - name: payment_method
+            description: One of Cash, Credit Card, Debit Card, QRIS, Transfer.
+          - name: transaction_status
+            description: SUCCESS, PENDING, FAILED. 27 SUCCESS rows have negative amount (logical contradiction).
+          - name: channel
+            description: BRANCH, MOBILE, PARTNER, WEB.
+          - name: updated_at
+            description: CDC watermark. Lag vs transaction_date is 0.04 to 2.0 days.
+          - name: merchant_category
+            description: ELECTRONICS, FASHION, FOOD, GROCERY, TRAVEL.
+          - name: device_type
+            description: ANDROID, IOS, WEB.
+          - name: currency
+            description: USD (6,254 rows) or IDR (6,046 rows). No FX column in source.
+          - name: fraud_flag
+            description: Y or N. Cast to BOOL in staging.
+          - name: promo_code
+            description: Sparse column. 4,838 nulls are expected, not errors.
+
+      - name: raw_customers
+        description: >
+          Source customers. 7,100 rows in Phase 1 sample. Includes 100 duplicate
+          customer_id pairs conflicting on email, phone_number, birth_date,
+          occupation, income_band, kyc_status. customer_status INACTIVE on
+          3,556 rows (50.1%). Fields that never conflict within duplicate pairs:
+          customer_name, city, customer_status, customer_segment.
+        columns:
+          - name: customer_id
+            description: Natural key. 100 duplicates expected pre-dedup.
+          - name: customer_name
+          - name: city
+          - name: registration_date
+            description: Customer onboarding date. Used as tie-breaker on dedup.
+          - name: customer_status
+            description: ACTIVE or INACTIVE.
+          - name: customer_segment
+            description: GOLD, PLATINUM, SILVER.
+          - name: email
+          - name: phone_number
+          - name: birth_date
+          - name: occupation
+            description: Doctor, Employee, Engineer, Entrepreneur, Teacher.
+          - name: income_band
+            description: '<5M, 5M-10M, 10M-20M, >20M.'
+          - name: kyc_status
+            description: PENDING, REJECTED, VERIFIED. Compliance-relevant; historized via SCD2.
+
+      - name: raw_branches
+        description: >
+          Source branches. 30 rows. 13 (43.3%) are INACTIVE. branch_name vs
+          city mismatch on 27 of 30 rows; carried as-is, not auto-corrected.
+        columns:
+          - name: branch_id
+            description: Natural key. No duplicates in source.
+          - name: branch_name
+            description: Branch display name. Mismatches city on 27/30 rows.
+          - name: region
+            description: Central, East, West.
+          - name: branch_status
+            description: ACTIVE or INACTIVE.
+          - name: branch_type
+            description: FLAGSHIP, PARTNER, REGULAR.
+          - name: opening_date
+          - name: manager_name
+          - name: city
