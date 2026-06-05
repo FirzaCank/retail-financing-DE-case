@@ -8,11 +8,11 @@ Stack: GCS + BigQuery + dbt + Python on GCP. The dbt models are also dialect-awa
 
 ## Architecture
 
-![architecture](docs/images/architecture.png)
+![architecture](docs/images/Architecture_diagram.png)
 
 Layers: GCS landing (immutable daily CSV) → raw (append-only, schema mirror) → staging (dedup, cast, DQ flag) → marts (fact + dims). Bad rows go to quarantine, not dropped.
 
-Full ERD: `docs/Phase2_Architecture_ERD.drawio`.
+Full ERD: `docs/images/ERD.png`.
 
 ---
 
